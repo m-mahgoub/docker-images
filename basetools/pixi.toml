@@ -1,0 +1,33 @@
+[workspace]
+name = "basetools"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.12,<3.13"
+bcftools = "*"
+htslib = "*"
+bedtools = "*"
+samtools = "*"
+numpy = "*"
+cython = "*"
+pyfaidx = "*"
+cyvcf2 = "*"
+pandas = "*"
+scipy = "*"
+scikit-learn = "*"
+pysam = "*"
+statsmodels = "*"
+pyranges = "*"
+pyyaml = "*"
+deeptools = "*"
+pybedtools = "*"
+openpyxl = "*"
+polars = "*"
+pyarrow = "*"
+biopython = "*"
+perl = "*"
+perl-app-cpanminus = "*"
+perl-statistics-basic = "*"
+perl-json = "*"
+perl-yaml-tiny = "*"

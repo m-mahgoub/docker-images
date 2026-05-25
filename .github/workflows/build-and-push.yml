@@ -1,0 +1,300 @@
+name: Build Or Promote Changed Containers
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '*/*'
+      - '*/*/**'
+      - '.github/promotions/*.json'
+      - '.github/workflows/build-and-push.yml'
+  workflow_dispatch:
+    inputs:
+      image_dir:
+        description: 'Optional image directory to build or promote, e.g. basetools'
+        required: false
+        type: string
+      promote_existing:
+        description: 'Use the committed promotion manifest instead of building'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  TZ: America/Chicago
+
+jobs:
+  determine-build-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed image-related files
+        id: changed-files
+        if: ${{ github.event_name == 'push' }}
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            */*
+            */*/**
+            .github/promotions/*.json
+
+      - name: Create build matrix
+        id: create-matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          manual_image_dir='${{ inputs.image_dir }}'
+          manual_promote='${{ inputs.promote_existing }}'
+          changed_files='${{ steps.changed-files.outputs.all_changed_files }}'
+          matrix_items="$(mktemp)"
+
+          add_image_dir() {
+            local dir="$1"
+            local promotion_requested="$2"
+            local image_name
+
+            dir="${dir%/}"
+            if [[ "${dir}" == ./* ]]; then
+              dir="${dir#./}"
+            fi
+
+            [[ -n "${dir}" ]] || return 0
+            [[ -f "${dir}/Dockerfile" ]] || return 0
+
+            image_name="$(
+              printf '%s' "${dir}" \
+                | tr '[:upper:]' '[:lower:]' \
+                | tr '/' '-' \
+                | tr -c 'a-z0-9._-' '-'
+            )"
+
+            jq -cn \
+              --arg path "${dir}" \
+              --arg image_name "${image_name}" \
+              --argjson promotion_requested "${promotion_requested}" \
+              '{path: $path, image_name: $image_name, promotion_requested: $promotion_requested}' >> "${matrix_items}"
+          }
+
+          if [[ -n "${manual_image_dir}" ]]; then
+            if [[ "${manual_promote}" == "true" ]]; then
+              add_image_dir "${manual_image_dir%/}" true
+            else
+              add_image_dir "${manual_image_dir%/}" false
+            fi
+          elif [[ -n "${changed_files}" ]]; then
+            printf '%s\n' "${changed_files}" \
+              | tr ' ' '\n' \
+              | sed '/^$/d' \
+              | while read -r changed_file; do
+                  if [[ "${changed_file}" == .github/promotions/*.json ]]; then
+                    image_dir="$(jq -r '.image_dir // empty' "${changed_file}")"
+                    add_image_dir "${image_dir%/}" true
+                  elif [[ "${changed_file}" == .github/* || "${changed_file}" == .gitignore || "${changed_file}" == BUILDING.md || "${changed_file}" == build_and_push.sh || "${changed_file}" == docker-builder-secrets.example ]]; then
+                    continue
+                  else
+                    top_dir="${changed_file%%/*}"
+                    add_image_dir "${top_dir}" false
+                  fi
+                done
+          fi
+
+          if [[ ! -s "${matrix_items}" ]]; then
+            echo 'matrix={"include":[]}' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          matrix="$(
+            jq -cs '
+              group_by(.path)
+              | map({
+                  path: .[0].path,
+                  image_name: .[0].image_name,
+                  promotion_requested: (map(.promotion_requested) | any)
+                })
+              | {include: .}
+            ' "${matrix_items}"
+          )"
+
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  build-or-promote:
+    needs: determine-build-matrix
+    if: ${{ needs.determine-build-matrix.outputs.matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.determine-build-matrix.outputs.matrix) }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare build or promotion metadata
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image_dir='${{ matrix.path }}'
+          image_name='${{ matrix.image_name }}'
+          promotion_requested='${{ matrix.promotion_requested }}'
+          owner="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          repo="ghcr.io/${owner}/${image_name}"
+          date_tag="$(TZ="${TZ}" date +%Y%m%d)"
+          created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          short_sha="${GITHUB_SHA::12}"
+          promotion_file=".github/promotions/${image_name}.json"
+
+          context_hash="$(
+            tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+              -C "${image_dir}" -cf - . \
+              | sha256sum \
+              | awk '{print $1}'
+          )"
+
+          mode="build"
+          source_image=""
+          origin="gha"
+
+          if [[ "${promotion_requested}" == "true" ]]; then
+            [[ -f "${promotion_file}" ]] || {
+              echo "Promotion was requested but ${promotion_file} does not exist." >&2
+              exit 1
+            }
+
+            manifest_image_dir="$(jq -r '.image_dir // empty' "${promotion_file}")"
+            manifest_image_name="$(jq -r '.image_name // empty' "${promotion_file}")"
+            manifest_context_hash="$(jq -r '.context_sha256 // empty' "${promotion_file}")"
+            source_image="$(jq -r '.source_image // empty' "${promotion_file}")"
+            origin="$(jq -r '.build_origin // "external"' "${promotion_file}")"
+
+            [[ "${manifest_image_dir}" == "${image_dir}" ]] || {
+              echo "Promotion manifest image_dir mismatch: ${manifest_image_dir} != ${image_dir}" >&2
+              exit 1
+            }
+
+            [[ "${manifest_image_name}" == "${image_name}" ]] || {
+              echo "Promotion manifest image_name mismatch: ${manifest_image_name} != ${image_name}" >&2
+              exit 1
+            }
+
+            [[ "${manifest_context_hash}" == "${context_hash}" ]] || {
+              echo "Promotion manifest context hash mismatch." >&2
+              echo "Manifest: ${manifest_context_hash}" >&2
+              echo "Current : ${context_hash}" >&2
+              exit 1
+            }
+
+            [[ -n "${source_image}" && "${source_image}" != "null" ]] || {
+              echo "Promotion manifest is missing source_image." >&2
+              exit 1
+            }
+
+            mode="promote"
+          fi
+
+          if [[ "${mode}" == "promote" ]]; then
+            tags="$(
+              printf '%s\n' \
+                "${repo}:latest" \
+                "${repo}:${date_tag}" \
+                "${repo}:sha-${short_sha}" \
+                "${repo}:promoted-${origin}-${short_sha}"
+            )"
+          else
+            tags="$(
+              printf '%s\n' \
+                "${repo}:latest" \
+                "${repo}:${date_tag}" \
+                "${repo}:sha-${short_sha}" \
+                "${repo}:gha-${date_tag}-${short_sha}"
+            )"
+          fi
+
+          {
+            echo "mode=${mode}"
+            echo "repo=${repo}"
+            echo "date_tag=${date_tag}"
+            echo "created_at=${created_at}"
+            echo "short_sha=${short_sha}"
+            echo "context_hash=${context_hash}"
+            echo "origin=${origin}"
+            echo "source_image=${source_image}"
+            echo "tags<<EOF"
+            printf '%s\n' "${tags}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push image in GitHub Actions
+        if: ${{ steps.prep.outputs.mode == 'build' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.path }}
+          file: ./${{ matrix.path }}/Dockerfile
+          push: true
+          tags: ${{ steps.prep.outputs.tags }}
+          labels: |
+            org.opencontainers.image.created=${{ steps.prep.outputs.created_at }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=${{ matrix.image_name }}
+            edu.wustl.dhslab.build.origin=gha
+            edu.wustl.dhslab.build.engine=github-actions
+            edu.wustl.dhslab.build.context_sha256=${{ steps.prep.outputs.context_hash }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Promote pre-built image
+        if: ${{ steps.prep.outputs.mode == 'promote' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=()
+          while IFS= read -r tag; do
+            [[ -n "${tag}" ]] || continue
+            args+=(-t "${tag}")
+          done <<< '${{ steps.prep.outputs.tags }}'
+
+          docker buildx imagetools create "${args[@]}" "${{ steps.prep.outputs.source_image }}"
+
+      - name: Write job summary
+        shell: bash
+        run: |
+          {
+            echo "## Container result"
+            echo ""
+            echo "- Image directory: \`${{ matrix.path }}\`"
+            echo "- Image name: \`${{ matrix.image_name }}\`"
+            echo "- Mode: \`${{ steps.prep.outputs.mode }}\`"
+            echo "- Origin: \`${{ steps.prep.outputs.origin }}\`"
+            echo "- Context SHA256: \`${{ steps.prep.outputs.context_hash }}\`"
+            echo ""
+            echo "Tags:"
+            while IFS= read -r tag; do
+              [[ -n "${tag}" ]] || continue
+              echo "- \`${tag}\`"
+            done <<< '${{ steps.prep.outputs.tags }}'
+          } >> "${GITHUB_STEP_SUMMARY}"

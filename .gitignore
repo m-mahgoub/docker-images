@@ -1,0 +1,16 @@
+*.pcap
+.docker-builder-secrets
+.env
+*.pem
+*.key
+.DS_Store
+
+.pixi/
+pixi-home/
+xdg-cache/
+xdg-config/
+xdg-data/
+xdg-state/
+
+test_repo/
+test_cli.sh
