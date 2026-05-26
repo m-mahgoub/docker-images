@@ -10,6 +10,7 @@ Start here:
 4. Use [docs/04-github-actions.md](docs/04-github-actions.md) to understand automatic builds and promotion.
 5. Use [docs/05-aws-builder.md](docs/05-aws-builder.md) to start and use an EC2 builder.
 6. Use [docs/06-reference.md](docs/06-reference.md) for tags, labels, manifests, and troubleshooting.
+7. Use [docs/07-public-ghcr.md](docs/07-public-ghcr.md) to make images pullable by SLURM/Pyxis without credentials.
 
 Most common commands:
 

@@ -123,6 +123,30 @@ compute_context_sha256() {
   tar -C "${context_dir}" -cf - . | hash_stream
 }
 
+repo_source_url() {
+  local url path
+
+  url="$(git config --get remote.origin.url 2>/dev/null || true)"
+  [[ -n "${url}" ]] || {
+    printf unknown
+    return 0
+  }
+
+  case "${url}" in
+    git@github.com:*)
+      path="${url#git@github.com:}"
+      path="${path%.git}"
+      printf 'https://github.com/%s' "${path}"
+      ;;
+    https://github.com/*)
+      printf '%s' "${url%.git}"
+      ;;
+    *)
+      printf '%s' "${url}"
+      ;;
+  esac
+}
+
 load_config_file() {
   local config_file="$1"
 
@@ -486,7 +510,7 @@ CONTEXT_HASH="$(compute_context_sha256 "${IMAGE_DIR}")"
 CONTEXT_SHORT="${CONTEXT_HASH:0:12}"
 CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 GIT_REVISION="$(git rev-parse HEAD 2>/dev/null || printf unknown)"
-GIT_SOURCE="$(git config --get remote.origin.url 2>/dev/null || printf unknown)"
+GIT_SOURCE="$(repo_source_url)"
 
 REGISTRY_HOST=""
 REPO=""

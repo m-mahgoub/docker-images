@@ -174,6 +174,12 @@ Manual promotion requires:
 
 ## Troubleshooting GHCR Push Permission
 
+For cluster pull visibility and Pyxis/Enroot troubleshooting, also see:
+
+```text
+docs/07-public-ghcr.md
+```
+
 Symptom:
 
 ```text

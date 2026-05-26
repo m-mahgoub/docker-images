@@ -244,3 +244,17 @@ Workflow runs but no image builds:
 The changed files probably are not under images/<image>/.
 This is expected for docs/, scripts/, and other repo-level support folders.
 ```
+
+Check whether GHCR images are anonymously pullable:
+
+```bash
+scripts/check_ghcr_public.sh --owner your-github-org-or-user
+```
+
+If the script reports `PUBLIC` but Pyxis/Enroot still authenticates and fails, remove or refresh the `ghcr.io` entry in:
+
+```text
+~/.config/enroot/.credentials
+```
+
+See `docs/07-public-ghcr.md`.
