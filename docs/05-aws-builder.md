@@ -147,6 +147,7 @@ ssh aws-docker-builder 'podman version'
 
 ```bash
 export IMAGE_DIR=basetools
+export IMAGE_PATH="images/${IMAGE_DIR}"
 export BUILDER_MODE=ssh
 export BUILDER_TARGET=aws-docker-builder
 export BUILDER_ENGINE=docker
@@ -158,6 +159,7 @@ export BUILDER_ENGINE=docker
 
 ```bash
 export IMAGE_DIR=basetools
+export IMAGE_PATH="images/${IMAGE_DIR}"
 export BUILDER_MODE=ssh
 export BUILDER_TARGET=aws-docker-builder
 export BUILDER_ENGINE=docker
@@ -172,6 +174,7 @@ export GHCR_TOKEN=your-github-token-with-package-write-access
 
 ```bash
 export IMAGE_DIR=basetools
+export IMAGE_PATH="images/${IMAGE_DIR}"
 export BUILDER_MODE=ssh
 export BUILDER_TARGET=aws-docker-builder
 export BUILDER_ENGINE=docker
@@ -185,7 +188,7 @@ export BUILDER_ENGINE=docker
 Then:
 
 ```bash
-git add "${IMAGE_DIR}" ".github/promotions/${IMAGE_DIR}.json"
+git add "${IMAGE_PATH}" ".github/promotions/${IMAGE_DIR}.json"
 git commit -m "Promote AWS-built ${IMAGE_DIR} image"
 git push origin main
 ```

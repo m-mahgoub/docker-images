@@ -31,16 +31,18 @@ export IMAGE_DIR=basetools
 Important rule:
 
 ```text
-Any committed change under an image directory can trigger that image build.
+Image source directories live under images/.
+Commands still use the logical image name, such as basetools.
+Any committed change under images/<image>/ can trigger that image build.
 ```
 
 Example:
 
 ```text
-basetools/Dockerfile                  triggers basetools
-basetools/pixi.toml                   triggers basetools
-basetools/scripts/install.sh          triggers basetools
-basetools/configs/tool.yaml           triggers basetools
-basetools/docs/notes.md               triggers basetools
-docs/general-notes.md                 does not trigger an image unless docs/ has a Dockerfile
+images/basetools/Dockerfile                  triggers basetools
+images/basetools/pixi.toml                   triggers basetools
+images/basetools/scripts/install.sh          triggers basetools
+images/basetools/configs/tool.yaml           triggers basetools
+images/basetools/docs/notes.md               triggers basetools
+docs/general-notes.md                        does not trigger any image
 ```

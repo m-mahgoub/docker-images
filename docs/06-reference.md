@@ -6,6 +6,8 @@
 ./build_and_push.sh <mode> <image-directory> [options]
 ```
 
+The image argument can be the short logical image name, such as `basetools`, or the explicit path, such as `images/basetools`. The recommended command style is the short name.
+
 Modes:
 
 ```text
@@ -58,6 +60,7 @@ Config options:
 
 ```text
 DEFAULT_REGISTRY
+IMAGE_ROOT
 BUILDER_MODE
 BUILDER_TARGET
 BUILDER_ENGINE
@@ -146,6 +149,8 @@ Path:
 .github/promotions/<image>.json
 ```
 
+`image_dir` stores the logical image name, such as `basetools`. The repository path is resolved as `images/<image>/` by default.
+
 Example:
 
 ```json
@@ -167,12 +172,12 @@ Example:
 
 The context hash protects promotion correctness.
 
-The script computes a SHA256 hash of the image directory contents. GitHub recomputes the hash from committed files. Promotion is allowed only when both hashes match.
+The script computes a SHA256 hash of the image directory contents under `images/<image>/`. GitHub recomputes the hash from committed files. Promotion is allowed only when both hashes match.
 
 Before emitting a promotion manifest:
 
 ```bash
-git status --short "${IMAGE_DIR}"
+git status --short "images/${IMAGE_DIR}"
 ```
 
 After emitting:
@@ -217,13 +222,13 @@ GitHub builds instead of promotes:
 
 ```text
 Confirm .github/promotions/<image>.json changed in the pushed commit.
-Confirm the manifest image_dir matches the image directory.
+Confirm the manifest image_dir matches the logical image name, such as basetools.
 For manual runs, set promote_existing to true.
 ```
 
 Workflow runs but no image builds:
 
 ```text
-The changed top-level folder probably does not contain a Dockerfile.
+The changed files probably are not under images/<image>/.
 This is expected for docs/, scripts/, and other repo-level support folders.
 ```

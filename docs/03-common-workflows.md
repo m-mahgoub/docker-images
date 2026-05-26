@@ -5,7 +5,10 @@ All examples assume you are in the repository root:
 ```bash
 cd /path/to/docker-images
 export IMAGE_DIR=basetools
+export IMAGE_PATH="images/${IMAGE_DIR}"
 ```
+
+`IMAGE_DIR` is the short logical name used by `build_and_push.sh`. `IMAGE_PATH` is the Git path where the files live.
 
 ## Workflow 1: Local Test Build
 
@@ -160,7 +163,7 @@ This is the important fast-track workflow.
 Use this when:
 
 ```text
-You changed Dockerfile/pixi.toml/scripts/configs inside the image directory.
+You changed Dockerfile/pixi.toml/scripts/configs inside `images/<image>/`.
 You built and tested the image on AWS.
 You want Git to track the exact files used for the build.
 You do not want GitHub Actions to rebuild the image.
@@ -170,7 +173,8 @@ Step 1: edit files under the image directory.
 
 ```bash
 export IMAGE_DIR=basetools
-$EDITOR "${IMAGE_DIR}/Dockerfile"
+export IMAGE_PATH="images/${IMAGE_DIR}"
+$EDITOR "${IMAGE_PATH}/Dockerfile"
 ```
 
 Step 2: test on AWS.
@@ -207,7 +211,7 @@ cat ".github/promotions/${IMAGE_DIR}.json"
 Step 5: commit the image files and promotion manifest together.
 
 ```bash
-git add "${IMAGE_DIR}" ".github/promotions/${IMAGE_DIR}.json"
+git add "${IMAGE_PATH}" ".github/promotions/${IMAGE_DIR}.json"
 git commit -m "Promote AWS-built ${IMAGE_DIR} image"
 git push origin main
 ```
@@ -215,9 +219,9 @@ git push origin main
 What GitHub Actions does after the push:
 
 ```text
-It sees files under basetools changed.
+It sees files under images/basetools changed.
 It sees .github/promotions/basetools.json changed.
-It recomputes the basetools build-context hash from the committed files.
+It recomputes the basetools build-context hash from the committed files under images/basetools.
 It compares that hash to the manifest.
 If the hashes match, it skips docker build.
 It retags the AWS-built source image as latest/date/sha/promoted tags.
@@ -237,8 +241,9 @@ Use this when you are comfortable with GitHub building the image.
 
 ```bash
 export IMAGE_DIR=basetools
+export IMAGE_PATH="images/${IMAGE_DIR}"
 
-git add "${IMAGE_DIR}"
+git add "${IMAGE_PATH}"
 git commit -m "Update ${IMAGE_DIR} image"
 git push origin main
 ```

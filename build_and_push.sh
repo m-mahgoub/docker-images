@@ -9,6 +9,9 @@ usage() {
 Usage:
   ./build_and_push.sh <mode> <image-directory> [options]
 
+The image argument can be a logical image name under IMAGE_ROOT, such as
+basetools, or an explicit path such as images/basetools.
+
 Modes:
   test                         Build then open an interactive shell
   push                         Build then push image tags
@@ -42,6 +45,7 @@ Config/secrets lookup:
 
 Recommended config variables:
   DEFAULT_REGISTRY              ghcr | dockerhub
+  IMAGE_ROOT                    Directory containing image folders (default: images)
   BUILDER_MODE                  auto | local | ssh
   BUILDER_TARGET                SSH target, e.g. aws-docker-builder
   BUILDER_ENGINE                docker | podman
@@ -231,7 +235,7 @@ write_promotion_manifest() {
   engine_safe="$(json_escape "${CONTAINER_CLI}")"
   source_safe="$(json_escape "${SOURCE_IMAGE}")"
   repository_safe="$(json_escape "${REPO}")"
-  image_dir_safe="$(json_escape "${IMAGE_DIR}")"
+  image_dir_safe="$(json_escape "${IMAGE_NAME_RAW}")"
   image_name_safe="$(json_escape "${IMAGE_NAME}")"
   registry_safe="$(json_escape "${REGISTRY}")"
   context_safe="$(json_escape "${CONTEXT_HASH}")"
@@ -258,14 +262,14 @@ write_promotion_manifest() {
 CONFIG_FILE="${DOCKER_BUILDER_SECRETS:-${HOME}/.config/.docker-builder-secrets}"
 LOAD_CONFIG=1
 MODE="${1:-}"
-IMAGE_DIR="${2:-}"
+IMAGE_REF="${2:-}"
 
 if [[ "${MODE}" == "-h" || "${MODE}" == "--help" || -z "${MODE}" ]]; then
   usage
   exit 0
 fi
 
-if [[ -z "${IMAGE_DIR}" ]]; then
+if [[ -z "${IMAGE_REF}" ]]; then
   usage
   die "missing required <image-directory>"
 fi
@@ -297,6 +301,8 @@ if [[ "${LOAD_CONFIG}" -eq 1 ]]; then
 fi
 
 REGISTRY="${DEFAULT_REGISTRY:-ghcr}"
+IMAGE_ROOT="${IMAGE_ROOT:-images}"
+IMAGE_ROOT="${IMAGE_ROOT%/}"
 DATE_TAG="$(date +%Y%m%d)"
 BUILDER_MODE="${BUILDER_MODE:-auto}"
 BUILDER_TARGET="${BUILDER_TARGET:-}"
@@ -405,9 +411,17 @@ if [[ "${EMIT_PROMOTION}" -eq 1 && "${MODE}" != "push" ]]; then
   die "--emit-promotion can only be used with push mode"
 fi
 
-IMAGE_DIR="${IMAGE_DIR%/}"
-if [[ "${IMAGE_DIR}" == ./* ]]; then
-  IMAGE_DIR="${IMAGE_DIR#./}"
+IMAGE_REF="${IMAGE_REF%/}"
+if [[ "${IMAGE_REF}" == ./* ]]; then
+  IMAGE_REF="${IMAGE_REF#./}"
+fi
+
+if [[ "${IMAGE_REF}" == "${IMAGE_ROOT}/"* ]]; then
+  IMAGE_NAME_RAW="${IMAGE_REF#${IMAGE_ROOT}/}"
+  IMAGE_DIR="${IMAGE_REF}"
+else
+  IMAGE_NAME_RAW="${IMAGE_REF}"
+  IMAGE_DIR="${IMAGE_ROOT}/${IMAGE_REF}"
 fi
 
 [[ -d "${IMAGE_DIR}" ]] || die "image directory '${IMAGE_DIR}' does not exist"
@@ -467,7 +481,7 @@ if [[ -z "${BUILD_ORIGIN}" ]]; then
 fi
 
 BUILD_ORIGIN="$(sanitize_ref_component "${BUILD_ORIGIN}")"
-IMAGE_NAME="$(sanitize_ref_component "${IMAGE_DIR%/}")"
+IMAGE_NAME="$(sanitize_ref_component "${IMAGE_NAME_RAW}")"
 CONTEXT_HASH="$(compute_context_sha256 "${IMAGE_DIR}")"
 CONTEXT_SHORT="${CONTEXT_HASH:0:12}"
 CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

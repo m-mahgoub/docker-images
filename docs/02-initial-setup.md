@@ -49,6 +49,7 @@ Minimum GHCR config:
 
 ```bash
 DEFAULT_REGISTRY=ghcr
+IMAGE_ROOT=images
 BUILDER_MODE=auto
 BUILDER_TARGET=
 BUILDER_ENGINE=docker
@@ -170,7 +171,7 @@ BUILDER_ENGINE=docker
 Verify config loads without building by using a harmless engine for parser testing:
 
 ```bash
-GHCR_OWNER=example-org ./build_and_push.sh test test_repo --no-config --builder local --engine true --registry ghcr
+GHCR_OWNER=example-org ./build_and_push.sh test basetools --no-config --builder local --engine true --registry ghcr
 ```
 
 The command above validates argument parsing and tagging only. It does not build a real image.

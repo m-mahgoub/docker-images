@@ -5,14 +5,13 @@ on:
     branches:
       - main
     paths:
-      - '*/*'
-      - '*/*/**'
+      - 'images/**'
       - '.github/promotions/*.json'
       - '.github/workflows/build-and-push.yml'
   workflow_dispatch:
     inputs:
       image_dir:
-        description: 'Optional image directory to build or promote, e.g. basetools'
+        description: 'Optional logical image name or path, e.g. basetools'
         required: false
         type: string
       promote_existing:
@@ -23,6 +22,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_ROOT: images
   TZ: America/Chicago
 
 jobs:
@@ -42,8 +42,7 @@ jobs:
         uses: tj-actions/changed-files@v46
         with:
           files: |
-            */*
-            */*/**
+            images/**
             .github/promotions/*.json
 
       - name: Create build matrix
@@ -56,11 +55,26 @@ jobs:
           manual_promote='${{ inputs.promote_existing }}'
           changed_files='${{ steps.changed-files.outputs.all_changed_files }}'
           matrix_items="$(mktemp)"
+          IMAGE_ROOT="${IMAGE_ROOT%/}"
 
           add_image_dir() {
-            local dir="$1"
+            local image_ref="$1"
             local promotion_requested="$2"
+            local dir
             local image_name
+
+            image_ref="${image_ref%/}"
+            if [[ "${image_ref}" == ./* ]]; then
+              image_ref="${image_ref#./}"
+            fi
+
+            if [[ "${image_ref}" == "${IMAGE_ROOT}/"* ]]; then
+              image_name="${image_ref#${IMAGE_ROOT}/}"
+              dir="${image_ref}"
+            else
+              image_name="${image_ref}"
+              dir="${IMAGE_ROOT}/${image_ref}"
+            fi
 
             dir="${dir%/}"
             if [[ "${dir}" == ./* ]]; then
@@ -71,7 +85,7 @@ jobs:
             [[ -f "${dir}/Dockerfile" ]] || return 0
 
             image_name="$(
-              printf '%s' "${dir}" \
+              printf '%s' "${image_name}" \
                 | tr '[:upper:]' '[:lower:]' \
                 | tr '/' '-' \
                 | tr -c 'a-z0-9._-' '-'
@@ -98,11 +112,12 @@ jobs:
                   if [[ "${changed_file}" == .github/promotions/*.json ]]; then
                     image_dir="$(jq -r '.image_dir // empty' "${changed_file}")"
                     add_image_dir "${image_dir%/}" true
-                  elif [[ "${changed_file}" == .github/* || "${changed_file}" == .gitignore || "${changed_file}" == BUILDING.md || "${changed_file}" == build_and_push.sh || "${changed_file}" == docker-builder-secrets.example ]]; then
-                    continue
+                  elif [[ "${changed_file}" == "${IMAGE_ROOT}/"* ]]; then
+                    remainder="${changed_file#${IMAGE_ROOT}/}"
+                    image_name="${remainder%%/*}"
+                    add_image_dir "${image_name}" false
                   else
-                    top_dir="${changed_file%%/*}"
-                    add_image_dir "${top_dir}" false
+                    continue
                   fi
                 done
           fi
@@ -160,6 +175,7 @@ jobs:
           image_dir='${{ matrix.path }}'
           image_name='${{ matrix.image_name }}'
           promotion_requested='${{ matrix.promotion_requested }}'
+          IMAGE_ROOT="${IMAGE_ROOT%/}"
           owner="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           repo="ghcr.io/${owner}/${image_name}"
           date_tag="$(TZ="${TZ}" date +%Y%m%d)"
@@ -178,13 +194,28 @@ jobs:
           source_image=""
           origin="gha"
 
+          resolve_image_dir() {
+            local image_ref="$1"
+
+            image_ref="${image_ref%/}"
+            if [[ "${image_ref}" == ./* ]]; then
+              image_ref="${image_ref#./}"
+            fi
+
+            if [[ "${image_ref}" == "${IMAGE_ROOT}/"* ]]; then
+              printf '%s' "${image_ref}"
+            else
+              printf '%s/%s' "${IMAGE_ROOT}" "${image_ref}"
+            fi
+          }
+
           if [[ "${promotion_requested}" == "true" ]]; then
             [[ -f "${promotion_file}" ]] || {
               echo "Promotion was requested but ${promotion_file} does not exist." >&2
               exit 1
             }
 
-            manifest_image_dir="$(jq -r '.image_dir // empty' "${promotion_file}")"
+            manifest_image_dir="$(resolve_image_dir "$(jq -r '.image_dir // empty' "${promotion_file}")")"
             manifest_image_name="$(jq -r '.image_name // empty' "${promotion_file}")"
             manifest_context_hash="$(jq -r '.context_sha256 // empty' "${promotion_file}")"
             source_image="$(jq -r '.source_image // empty' "${promotion_file}")"

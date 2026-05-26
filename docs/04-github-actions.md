@@ -12,37 +12,36 @@ The workflow watches:
 
 ```yaml
 paths:
-  - '*/*'
-  - '*/*/**'
+  - 'images/**'
   - '.github/promotions/*.json'
   - '.github/workflows/build-and-push.yml'
 ```
 
-Image build detection is based on top-level image directories.
+Image build detection is based on logical image names under `images/`.
 
 If this changes:
 
 ```text
-basetools/scripts/setup.sh
+images/basetools/scripts/setup.sh
 ```
 
 GitHub maps it to:
 
 ```text
-basetools/
+images/basetools/
 ```
 
 Then it builds `basetools` only if:
 
 ```text
-basetools/Dockerfile
+images/basetools/Dockerfile
 ```
 
 exists.
 
 ## What Does Not Build
 
-These do not build images unless their top-level directory has a `Dockerfile`:
+These do not build images:
 
 ```text
 docs/04-github-actions.md
@@ -58,7 +57,7 @@ If an image directory changes and no promotion manifest changed for that image, 
 Example:
 
 ```bash
-git add basetools
+git add images/basetools
 git commit -m "Update basetools image"
 git push origin main
 ```
@@ -77,7 +76,7 @@ If `.github/promotions/<image>.json` changed, GitHub promotes the source image f
 Example:
 
 ```bash
-git add basetools .github/promotions/basetools.json
+git add images/basetools .github/promotions/basetools.json
 git commit -m "Promote AWS-built basetools image"
 git push origin main
 ```
@@ -191,7 +190,7 @@ Answer:
   --login \
   --emit-promotion
 
-git add basetools .github/promotions/basetools.json
+git add images/basetools .github/promotions/basetools.json
 git commit -m "Promote AWS-built basetools image"
 git push origin main
 ```
@@ -199,13 +198,13 @@ git push origin main
 Question:
 
 ```text
-I changed basetools/docs/notes.md. Will it rebuild basetools?
+I changed images/basetools/docs/notes.md. Will it rebuild basetools?
 ```
 
 Answer:
 
 ```text
-Yes. It is inside the basetools image directory.
+Yes. It is inside the basetools image directory under images/.
 ```
 
 Question:
@@ -217,5 +216,5 @@ I changed docs/notes.md. Will it rebuild basetools?
 Answer:
 
 ```text
-No. It is not inside basetools, and docs/ has no Dockerfile.
+No. It is not inside images/basetools.
 ```
