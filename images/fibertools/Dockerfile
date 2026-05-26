@@ -58,3 +58,4 @@ RUN set -eu; \
 
 # pixi-managed executables (python + tools) take precedence in Podman/Singularity.
 ENV PATH=${PIXI_PROJECT_DIR}/.pixi/envs/default/bin:${PIXI_HOME}/bin:${UCSC_BIN_DIR}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+#
