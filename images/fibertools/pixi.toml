@@ -1,0 +1,18 @@
+[workspace]
+name = "fibertools"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.12,<3.13"
+bcftools = "*"
+htslib = "*"
+bedtools = "*"
+numba = "*"
+matplotlib = "*"
+h5py = "*"
+samtools = "*"
+fibertools-rs = ">=0.9.0"
+
+[pypi-dependencies]
+fiberhmm = ">=2.12.0"
