@@ -209,6 +209,18 @@ test -n "${GHCR_TOKEN}" && echo "GHCR_TOKEN is set"
 
 Do not print the token value.
 
+GitHub Actions GHCR push fails with `403 Forbidden`:
+
+```text
+The image probably built successfully, but GHCR rejected the workflow token.
+Confirm the workflow has packages: write.
+If the GHCR package already existed, grant this repository access from:
+Package settings -> Manage Actions access -> Add Repository -> Write.
+If the package is disposable, delete it and let GitHub Actions recreate it.
+If package access is managed centrally, consider a dedicated GHCR_TOKEN repository secret.
+See docs/04-github-actions.md for the full decision tree.
+```
+
 Promotion context mismatch:
 
 ```text
