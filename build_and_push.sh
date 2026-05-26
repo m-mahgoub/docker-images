@@ -22,6 +22,7 @@ Builder options:
   --engine <docker|podman>      Container engine locally or on SSH builder
   --platform <platform>         Optional platform, e.g. linux/amd64
   --shell <path>                Shell for test mode (default: /bin/bash)
+  --no-mount-pwd                Do not mount current directory in local test mode
 
 Registry and tagging options:
   -r, --registry <target>       Registry target: ghcr | dockerhub
@@ -186,6 +187,17 @@ engine_push() {
   fi
 }
 
+run_local_test_shell() {
+  local run_cmd=("${CONTAINER_CLI}" run --rm -it --entrypoint "${TEST_SHELL}")
+
+  if [[ "${MOUNT_PWD_IN_TEST}" -eq 1 ]]; then
+    run_cmd+=(-v "${PWD}:${PWD}" -w "${PWD}")
+  fi
+
+  run_cmd+=("${SOURCE_IMAGE}")
+  exec "${run_cmd[@]}"
+}
+
 build_local() {
   local build_cmd=("${CONTAINER_CLI}" build -f "${DOCKERFILE_PATH}")
   local tag label
@@ -333,6 +345,7 @@ BUILDER_TARGET="${BUILDER_TARGET:-}"
 CONTAINER_CLI="${BUILDER_ENGINE:-}"
 PLATFORM=""
 TEST_SHELL="/bin/bash"
+MOUNT_PWD_IN_TEST="${MOUNT_PWD_IN_TEST:-1}"
 DO_LOGIN=0
 BUILD_OPTS=()
 REMOTE_MODE=0
@@ -381,6 +394,14 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "--shell requires a value"
       TEST_SHELL="$2"
       shift 2
+      ;;
+    --mount-pwd)
+      MOUNT_PWD_IN_TEST=1
+      shift
+      ;;
+    --no-mount-pwd)
+      MOUNT_PWD_IN_TEST=0
+      shift
       ;;
     --login)
       DO_LOGIN=1
@@ -434,6 +455,11 @@ esac
 if [[ "${EMIT_PROMOTION}" -eq 1 && "${MODE}" != "push" ]]; then
   die "--emit-promotion can only be used with push mode"
 fi
+
+case "${MOUNT_PWD_IN_TEST}" in
+  0|1) ;;
+  *) die "MOUNT_PWD_IN_TEST must be 0 or 1" ;;
+esac
 
 IMAGE_REF="${IMAGE_REF%/}"
 if [[ "${IMAGE_REF}" == ./* ]]; then
@@ -581,12 +607,18 @@ fi
 
 if [[ "${MODE}" == "test" ]]; then
   echo "Launching interactive test shell (${TEST_SHELL}) in ${SOURCE_IMAGE}"
+  if [[ "${MOUNT_PWD_IN_TEST}" -eq 1 && "${REMOTE_MODE}" -eq 0 ]]; then
+    echo "Mounting current directory at same path: ${PWD}"
+  elif [[ "${MOUNT_PWD_IN_TEST}" -eq 1 && "${REMOTE_MODE}" -eq 1 ]]; then
+    echo "Remote test mode does not mount local PWD; use cluster/Singularity for same-filesystem PWD tests."
+  fi
+
   if [[ "${REMOTE_MODE}" -eq 1 ]]; then
     RUN_CMD=""
     shell_join RUN_CMD "${CONTAINER_CLI}" run --rm -it --entrypoint "${TEST_SHELL}" "${SOURCE_IMAGE}"
     exec ssh -tt "${BUILDER_TARGET}" "${RUN_CMD}"
   else
-    exec "${CONTAINER_CLI}" run --rm -it --entrypoint "${TEST_SHELL}" "${SOURCE_IMAGE}"
+    run_local_test_shell
   fi
 fi
 

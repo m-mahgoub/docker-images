@@ -19,6 +19,8 @@ export IMAGE_DIR=basetools
 ./build_and_push.sh test "${IMAGE_DIR}" --builder local --registry ghcr
 ```
 
+Local test mode starts the shell in your current host directory by mounting `$PWD` at the same path inside the container.
+
 ```bash
 export IMAGE_DIR=basetools
 ./build_and_push.sh test "${IMAGE_DIR}" --builder ssh --host aws-docker-builder --registry ghcr

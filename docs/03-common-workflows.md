@@ -28,6 +28,7 @@ What happens:
 ```text
 Docker/Podman builds the image locally.
 The image is tagged with local-origin tags.
+The current host directory is mounted at the same path inside the container.
 The script opens an interactive shell inside the container.
 Nothing is pushed.
 ```
@@ -40,7 +41,17 @@ python --version
 which samtools
 samtools --version
 echo "$PATH"
+pwd
 exit
+```
+
+Disable current-directory mounting:
+
+```bash
+./build_and_push.sh test "${IMAGE_DIR}" \
+  --builder local \
+  --registry ghcr \
+  --no-mount-pwd
 ```
 
 Force Podman locally:
@@ -82,6 +93,7 @@ The local image directory is tar-streamed to AWS over SSH.
 AWS builds the image from that streamed context.
 The remote temporary context is removed after build.
 The script opens an interactive shell inside the container on AWS.
+The local PWD is not mounted because the EC2 builder does not share your local filesystem.
 Nothing is pushed.
 ```
 
@@ -363,6 +375,15 @@ Disable cache:
   --host aws-docker-builder \
   --registry ghcr \
   --build-opt "--no-cache"
+```
+
+Do not mount the current directory during local test mode:
+
+```bash
+./build_and_push.sh test "${IMAGE_DIR}" \
+  --builder local \
+  --registry ghcr \
+  --no-mount-pwd
 ```
 
 Use a custom origin tag:

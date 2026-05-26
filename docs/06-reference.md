@@ -23,7 +23,10 @@ Builder options:
 --engine docker|podman
 --platform linux/amd64
 --shell /bin/bash
+--no-mount-pwd
 ```
+
+Local `test` mode mounts the current host directory at the same absolute path inside the container by default. Use `--no-mount-pwd` to disable that. SSH/AWS test mode does not mount the local current directory because the remote builder does not share the local filesystem.
 
 Registry options:
 
